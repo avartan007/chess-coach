@@ -1,0 +1,8 @@
+# nixpacks.toml — Production build configuration for Railway
+# Auto-provisions system packages including the Stockfish chess engine binary
+
+[providers]
+python = {}
+
+[phases.setup]
+nixPkgs = ["python310", "stockfish"]

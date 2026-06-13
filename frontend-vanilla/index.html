@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chess Coach — Deep AI Pattern Analytics & Blunder Solver</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+  <!-- Three.js CDN securely imported -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+
+  <!-- WebGL 3D Background Canvas -->
+  <canvas id="three-canvas"></canvas>
+
+  <div class="app">
+
+    <!-- NAVIGATION HEADER -->
+    <nav class="nav">
+      <div class="nav-logo" id="nav-logo">
+        <svg class="nav-logo-icon" viewBox="0 0 22 22" fill="none">
+          <rect x="3" y="14" width="16" height="4" rx="2" fill="#e27d38"/>
+          <path d="M7 14 Q7 8 9 6 Q11 4 11 4 Q11 4 13 6 Q15 8 15 14Z" fill="#e27d38"/>
+          <rect x="8" y="2" width="6" height="2" rx="1" fill="#e27d38"/>
+          <rect x="10" y="1" width="2" height="5" rx="1" fill="#f4dac4"/>
+        </svg>
+        Chess Coach
+      </div>
+      <button class="nav-tab on" id="tab-sa" onclick="showScreen('sa', this)">Game Analysis</button>
+      <button class="nav-tab" id="tab-sp" onclick="showScreen('sp', this)">My Patterns</button>
+      <button class="nav-tab" id="tab-st" onclick="showScreen('st', this)">Blunder Trainer</button>
+    </nav>
+
+    <!-- 3D INTERACTIVE SCROLLABLE LANDING SCREEN -->
+    <div class="scr on" id="landing">
+      
+      <!-- Section 1: Hero Block Grid -->
+      <section class="land-section">
+        <div class="land-hero-grid">
+          
+          <!-- Left Column: Vision & Action -->
+          <div class="land-hero-text">
+            <h1>Master your chess blindspots.</h1>
+            <p>Chess Coach extracts your recent matches directly from Chess.com, analyzes every move with depth-14 Stockfish, and builds personalized training modules based on your actual blunders.</p>
+            
+            <div class="land-hero-buttons">
+              <button class="btn-primary lg" onclick="document.getElementById('setup-card').scrollIntoView({ behavior: 'smooth' })">Get Started Now ↓</button>
+              <!-- Cached Session Resume Button (Shown via JS when data is found) -->
+              <button id="btn-resume" class="btn-secondary lg" style="display: none;" onclick="resumeSession()">Resume Session</button>
+            </div>
+          </div>
+
+          <!-- Right Column: Interactive Configuration Glass Card -->
+          <div class="land-box" id="setup-card">
+            <div style="text-align: center; margin-bottom: 24px;">
+              <h3 style="font-family: 'Outfit', sans-serif; font-size: 20px; font-weight: 700; color: var(--sp);">Analyze New Account</h3>
+              <p style="font-size: 11px; color: var(--t2);">Enter your Chess.com details to map your performance.</p>
+            </div>
+
+            <div class="land-input-group">
+              <label class="land-label">Chess.com Username</label>
+              <input type="text" id="username-input" class="land-input" placeholder="e.g. Hikaru">
+            </div>
+
+            <div class="land-input-group">
+              <label class="land-label">Games to analyze</label>
+              <select id="count-input" class="land-input" style="appearance: none; background-image: radial-gradient(circle, var(--t2) 1px, transparent 1px); background-position: right 14px center; background-size: 8px 8px; background-repeat: no-repeat;">
+                <option value="1">1 game (Quick test)</option>
+                <option value="5">5 games</option>
+                <option value="10" selected>10 games (Recommended)</option>
+                <option value="20">20 games (Deep scan)</option>
+              </select>
+            </div>
+
+            <div id="land-err" style="display: none; background: rgba(184, 60, 36, 0.1); border: 1px solid rgba(184, 60, 36, 0.25); color: #e88670; padding: 12px; border-radius: 8px; font-size: 12px; margin-bottom: 20px;"></div>
+
+            <button id="btn-analyze" class="btn-primary" onclick="startAnalysis()">Start Engine Sync →</button>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- Section 2: Deep Core Focus Areas -->
+      <section class="land-section">
+        <div class="section-hdr">
+          <h2>Engineered to improve your rating</h2>
+          <p>Unlike generic puzzle lists, Chess Coach isolates your personal mistakes, building a loop of specialized practice where you need it most.</p>
+        </div>
+
+        <div class="feat-cards-grid">
+          <div class="feat-card">
+            <div class="feat-icon-box">♟</div>
+            <h3>Holographic Blunder Corrector</h3>
+            <p>Play through actual positions from your games where you committed errors. Find the corrective line, compare it to what you played, and master the motif.</p>
+          </div>
+          <div class="feat-card">
+            <div class="feat-icon-box">📊</div>
+            <h3>Advanced Bento Diagnostics</h3>
+            <p>Track your centipawn drops, opening book theory deviation depth, and king safety ratings through a data-rich bento grid analytics board.</p>
+          </div>
+          <div class="feat-card">
+            <div class="feat-icon-box">🎯</div>
+            <h3>Tactical Hotspot Matrix</h3>
+            <p>Discover if you commit more errors in the opening, middlegame, or endgame, and identify exactly which coordinates (like f7 or e4) are your blind spots.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 3: Deep Scan Pipeline Diagram -->
+      <section class="land-section">
+        <div class="section-hdr">
+          <h2>The stockfish coaching pipeline</h2>
+          <p>Every single turn is scanned at depth-14 on the fly to build accurate centipawn loss profiles.</p>
+        </div>
+
+        <div class="pipeline-box">
+          <div class="pipe-step">
+            <span class="pipe-num">01</span>
+            <h4>Import & Fetch</h4>
+            <p>We connect to Chess.com public servers to retrieve your recent game PGN databases instantly.</p>
+          </div>
+          <div class="pipe-step">
+            <span class="pipe-num">02</span>
+            <h4>Deep Engine Analysis</h4>
+            <p>Our local Stockfish engine scans every single move, measuring centipawn loss values for both players.</p>
+          </div>
+          <div class="pipe-step">
+            <span class="pipe-num">03</span>
+            <h4>Diagnostic Training</h4>
+            <p>We package your blunders into interactive training puzzles so you can correct your real in-game errors.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 4: Testimonials Block -->
+      <section class="land-section">
+        <div class="section-hdr">
+          <h2>Loved by ambitious players</h2>
+          <p>See how players are using their real blunders to master positional concepts and boost their elo.</p>
+        </div>
+
+        <div class="reviews-grid">
+          <div class="review-card">
+            <p class="rev-quote">"Correcting my own blunders instead of generic chess puzzles completely changed my middlegame structure. I went from 1400 to 1600 on Chess.com in just three weeks."</p>
+            <div class="rev-author">
+              <div class="rev-avatar">A</div>
+              <div class="rev-info">
+                <h5>Alex K.</h5>
+                <span>1650 Elo Active Player</span>
+              </div>
+            </div>
+          </div>
+          <div class="review-card">
+            <p class="rev-quote">"The tactical hotspot index pointed out that f7 and e4 were my biggest defensive blind spots. Highly recommend the localStorage resume caching feature as well."</p>
+            <div class="rev-author">
+              <div class="rev-avatar">S</div>
+              <div class="rev-info">
+                <h5>Sarah M.</h5>
+                <span>1820 Elo Club Player</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 5: Interactive FAQ Accordion -->
+      <section class="land-section">
+        <div class="section-hdr">
+          <h2>Frequently Asked Questions</h2>
+          <p>Have questions about how Chess Coach calculates your statistics? We have answers.</p>
+        </div>
+
+        <div class="faq-list">
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="this.parentElement.classList.toggle('active')">
+              <h4>How deep is the Stockfish engine scan?</h4>
+              <span class="faq-arrow">→</span>
+            </button>
+            <div class="faq-content">
+              <p>Every single position is evaluated using Stockfish 16 at a depth-14 scan. This provides highly reliable centipawn evaluation scales for all phases of your games.</p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="this.parentElement.classList.toggle('active')">
+              <h4>What is the Tactical Hotspot Matrix?</h4>
+              <span class="faq-arrow">→</span>
+            </button>
+            <div class="faq-content">
+              <p>Our algorithm scans all moves classified as mistakes or blunders, maps their origin coordinates, and isolates the specific board square where you commit the most errors.</p>
+            </div>
+          </div>
+          <div class="faq-item">
+            <button class="faq-trigger" onclick="this.parentElement.classList.toggle('active')">
+              <h4>How does session caching work?</h4>
+              <span class="faq-arrow">→</span>
+            </button>
+            <div class="faq-content">
+              <p>Your analyzed games are securely stored inside your browser's local storage database. Next time you open the app, you can load your complete dashboard in 10ms with no API calls.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 6: Professional Legal Footer & Checkmate Display Notice -->
+      <footer class="footer">
+        <div class="footer-inner">
+          
+          <div class="foot-brand">
+            <h3>Chess Coach</h3>
+            <p>Elevating player performance through personalized, engine-driven mistake analytics and interactive puzzle training.</p>
+          </div>
+
+          <div class="foot-col">
+            <h4>Legal Documents</h4>
+            <ul>
+              <li><a onclick="alert('Privacy Policy:\n\nChess Coach values your privacy. We store your chess usernames, match records, and analysis statistics strictly locally in your browser\'s secure localStorage. No personal chess credentials or data profiles are uploaded to external tracking servers.')">Privacy Policy</a></li>
+              <li><a onclick="alert('Terms of Service:\n\nBy using Chess Coach, you agree that your match records are retrieved strictly from public Chess.com API directories. The diagnostic evaluations are compiled for personal coaching purposes. Usage is subject to local hosting policies.')">Terms of Service</a></li>
+            </ul>
+          </div>
+
+          <div class="foot-col">
+            <h4>Hologram Checkmate</h4>
+            <p style="font-size: 11px; color: var(--t2); line-height: 1.5;">At the bottom of this footer, the 3D background board has resolved into a classic <strong>Checkmate Position</strong> (Scholar's Mate). White Queen at f7 checkmates the cornered Black King on e8.</p>
+          </div>
+
+        </div>
+
+        <div class="foot-legal">
+          <span>&copy; 2026 Chess Coach. All rights reserved.</span>
+          <span>Powered by Stockfish 16 & Three.js WebGL</span>
+        </div>
+      </footer>
+
+    </div>
+
+    <!-- SCANNING & LOADING GLASS MODAL -->
+    <div class="scr" id="loading">
+      <div class="load-card">
+        <div class="load-spinner">♚</div>
+        <h2>Analyzing <span id="load-user" style="color: var(--oc);"></span></h2>
+        <p style="margin-bottom: 8px;">Fetching recent game logs from Chess.com APIs...</p>
+        <p style="color: var(--t3); font-size: 11px;">Running Stockfish depth-14 evaluation pipelines. This process takes approximately 10-30 seconds depending on game length.</p>
+      </div>
+    </div>
+
+    <!-- GAME REPLAY & ENGINE LOG SCREEN -->
+    <div class="scr" id="sa">
+
+      <!-- Left Sidebar: List of scanned games -->
+      <div class="gl">
+        <div class="panel-hdr">
+          <span class="panel-hdr-title">Scanned Games</span>
+          <span class="panel-hdr-count" id="gl-count">0 games</span>
+        </div>
+        <div class="gl-inner" id="gl-inner"></div>
+      </div>
+
+      <!-- Center Space: Board layout and coordinate layers -->
+      <div class="ba">
+        <div class="bwrap">
+          <div class="board-side">
+            <div class="board-and-ranks">
+              <div class="ranks" id="ranks"></div>
+              <div>
+                <div class="board" id="board"></div>
+                <div class="files" id="files"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Move Log Replay Card -->
+          <div class="move-list-pane">
+            <div class="panel-hdr">
+              <span class="panel-hdr-title">Move Transcript</span>
+              <span class="panel-hdr-count" id="eval-display">Start position</span>
+            </div>
+            <div class="mscroll" id="mlist"></div>
+          </div>
+        </div>
+
+        <!-- Navigation controller -->
+        <div class="bnav">
+          <button class="nbtn" onclick="navMove(-999)" title="First Move">⇤</button>
+          <button class="nbtn" onclick="navMove(-1)"   title="Previous Move (←)">←</button>
+          <div class="eval-display" id="eval-main">Start position</div>
+          <button class="nbtn" onclick="navMove(1)"    title="Next Move (→)">→</button>
+          <button class="nbtn" onclick="navMove(999)"  title="Last Move">⇥</button>
+        </div>
+      </div>
+
+      <!-- Right Sidebar: Move classifications & specific game coach findings -->
+      <div class="rp" id="rp"></div>
+
+    </div>
+
+    <!-- COACH DASHBOARD SCREEN -->
+    <div class="scr" id="sp">
+      <div class="dash">
+        <div class="dash-hdr">
+          <h2>Coaching Performance</h2>
+          <span class="dash-meta" id="dash-meta"></span>
+        </div>
+        <div class="bg6" id="bento"></div>
+      </div>
+    </div>
+
+    <!-- MISTAKE CORRECTOR & PUZZLE TRAINER SCREEN -->
+    <div class="scr" id="st">
+
+      <!-- Blunder Positions Grouped List -->
+      <div class="tlist" id="tlist"></div>
+
+      <!-- Active Interactive Workspace -->
+      <div class="tcenter">
+        <div class="tscore" id="tscore"></div>
+
+        <div class="howto">
+          <strong>Interactive Blunder Corrector:</strong>
+          Click a piece to highlight all valid options. Click the target destination to submit your corrective move. Yellow squares indicate your game mistake, and green squares reveal the engine's recommendation.
+        </div>
+
+        <div class="tboard-frame">
+          <div class="tboard" id="tboard"></div>
+        </div>
+
+        <div class="tturn" id="tturn"></div>
+        <div class="pdots" id="pdots"></div>
+      </div>
+
+      <!-- Analysis and Explanation Cards -->
+      <div class="tpanel" id="tpanel"></div>
+
+    </div>
+
+  </div>
+
+  <!-- Script Imports -->
+  <script src="chess.js"></script>
+  <script src="pieces.js"></script>
+  <script src="app.js"></script>
+
+</body>
+</html>
