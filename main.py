@@ -7,6 +7,7 @@ import chess
 import chess.pgn
 import chess.engine
 import io
+import logging
 import os
 import re
 import time
@@ -832,4 +833,6 @@ def health():
 # In production: run `npm run build` inside frontend/, then start this server
 import os as _os
 _FRONTEND_DIR = "frontend/dist" if _os.path.isdir("frontend/dist") else "frontend"
-app.mount("/", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")
+# API-only deployments (e.g. frontend hosted on Vercel) may not ship the frontend dir
+if _os.path.isdir(_FRONTEND_DIR):
+    app.mount("/", StaticFiles(directory=_FRONTEND_DIR, html=True), name="frontend")

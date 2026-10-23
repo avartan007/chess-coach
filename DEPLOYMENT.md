@@ -1,100 +1,165 @@
 # Chess Coach OS — Production Deployment Guide
 
-This guide provides step-by-step instructions for deploying Chess Coach OS to production. The frontend (Vite/React) is hosted on **Vercel**, and the backend (FastAPI/Python) is hosted on **Railway**, which allows us to automatically provision the **Stockfish** binary using system-level Nix packages.
+Production uses two managed services:
+
+| Piece | Platform | Why |
+| --- | --- | --- |
+| React/Vite frontend | **Vercel** (static site) | Fast global CDN, zero-config Vite builds |
+| FastAPI + Stockfish backend | **Render** (Docker web service) | Needs a real `stockfish` binary and requests that can run for minutes |
+
+> **Do not deploy the backend to Vercel Functions.** Vercel's Python runtime cannot install
+> Stockfish system packages, and `/analyze` runs Stockfish synchronously, which can take several
+> minutes for 10 games (Hobby functions time out at ~60s, Pro at ~300s). Vercel is only used for the
+> static frontend.
+
+```
+Browser ──> https://<app>.vercel.app   (static React bundle, built with VITE_API_URL)
+                │
+                └── fetch POST /analyze (CORS) ──> https://<api>.onrender.com  (FastAPI + Stockfish)
+```
 
 ---
 
-## 1. Production Architecture
+## 1. Backend on Render (Docker + Stockfish)
 
-In production, the frontend and backend are deployed as separate, decoupled services:
-- **Frontend URL:** `https://your-chess-coach-os.vercel.app` (Static React bundle)
-- **Backend URL:** `https://your-backend-service.railway.app` (FastAPI REST service)
+The repo ships a `Dockerfile` that installs Stockfish from Debian (`/usr/games/stockfish`) and starts
+Uvicorn on Render's `$PORT`, and a `render.yaml` Blueprint.
+
+### Option A — Blueprint (recommended)
+
+1. Push this repo to GitHub.
+2. In [Render](https://render.com) click **New → Blueprint**, select the repo.
+3. Render reads `render.yaml` and creates the `chess-coach-api` web service.
+4. When prompted, set `ALLOWED_ORIGINS` to your Vercel URL (comma-separate multiple origins), e.g.
+   `https://chess-coach.vercel.app`.
+5. Deploy, then copy the service URL (`https://chess-coach-api.onrender.com`).
+
+### Option B — Manual
+
+1. **New → Web Service** → connect the repo.
+2. **Language:** Docker, **Dockerfile Path:** `./Dockerfile`, **Plan:** Free (or higher).
+3. Add environment variables:
+
+   | Key | Value |
+   | --- | --- |
+   | `ENVIRONMENT` | `production` |
+   | `STOCKFISH_PATH` | `/usr/games/stockfish` |
+   | `ALLOWED_ORIGINS` | `https://<your-app>.vercel.app` |
+   | `PORT` | leave unset — Render injects it |
+
+4. **Health Check Path:** `/health`.
+5. Deploy.
+
+`ENVIRONMENT=production` turns on fail-fast startup checks: the app refuses to boot without an
+explicit `ALLOWED_ORIGINS` (no `*`) and a working Stockfish binary.
+
+### Verify the backend
+
+```bash
+curl https://<your-api>.onrender.com/health
+# {"status":"ok","details":{"env":"production","stockfish_available":true}}
+```
+
+### Environment variables reference
+
+| Variable | Required in prod | Notes |
+| --- | --- | --- |
+| `ENVIRONMENT` | yes | `production` enforces CORS + Stockfish checks |
+| `ALLOWED_ORIGINS` | yes | Comma-separated, no `*`; must include the Vercel origin |
+| `STOCKFISH_PATH` | recommended | `/usr/games/stockfish` in the Docker image; auto-detected via `PATH` otherwise |
+| `PORT` | no | Injected by Render |
 
 ---
 
-## 2. Frontend Deployment: Vercel
+## 2. Frontend on Vercel
 
-Vercel is used to host static web assets due to its global edge network, build caching, and Brotli compression.
-
-### Step-by-Step Vercel Setup:
-1. Sign in to your [Vercel Account](https://vercel.com).
-2. Click **Add New** → **Project**.
-3. Import your GitHub repository.
-4. Configure the Project Settings:
+1. In [Vercel](https://vercel.com) click **Add New → Project** and import the same repo.
+2. Configure:
    - **Framework Preset:** Vite
    - **Root Directory:** `frontend`
    - **Build Command:** `npm run build`
    - **Output Directory:** `dist`
-5. Configure Environment Variables (Optional):
-   - If your frontend needs to query a specific backend domain instead of relative endpoints, add:
-     ```env
-     VITE_API_URL=https://your-backend-service.railway.app
-     ```
-6. Click **Deploy**. Vercel will compile the React assets and host them under a secure `https` domain.
+3. Add an environment variable (Production *and* Preview):
+
+   ```env
+   VITE_API_URL=https://<your-api>.onrender.com
+   ```
+
+   No trailing slash. `VITE_*` values are inlined at **build time**, so changing this requires a
+   redeploy (not just a restart).
+4. **Deploy**.
+
+If `VITE_API_URL` is missing, the app calls `/analyze` on the Vercel domain, which returns 404.
+
+### CORS round-trip
+
+Set `ALLOWED_ORIGINS` on Render to the exact Vercel origin(s). For preview deployments either add
+each preview URL or use a stable production domain. Mismatched scheme/host fails the browser
+preflight.
 
 ---
 
-## 3. Backend Deployment: Railway with Stockfish
+## 3. Optional: single-service deployment on Render
 
-Because the FastAPI server executes Stockfish locally via the `python-chess` library, the hosting server must have the `stockfish` binary installed and accessible. We use **Railway** with **Nixpacks** to install system dependencies during the build.
-
-### Step 1: Verify `nixpacks.toml` at Repository Root
-Ensure there is a `nixpacks.toml` file at the root of your project directory. This tells Railway's builder to pull Stockfish from the Nix package registry during deployment:
-
-```toml
-# nixpacks.toml at repository root
-[providers]
-python = {}
-
-[phases.setup]
-nixPkgs = ["python310", "stockfish"]
-```
-
-### Step 2: Stockfish Path Resolution in `main.py`
-The backend automatically resolves the binary path on startup using:
-```python
-# Resolved in main.py
-STOCKFISH_PATH = os.getenv("STOCKFISH_PATH") or shutil.which("stockfish") or "/usr/games/stockfish"
-```
-On Railway, `shutil.which("stockfish")` will automatically locate the Stockfish executable installed by Nixpacks on the system PATH.
-
-### Step 3: Step-by-Step Railway Setup:
-1. Log in to [Railway.app](https://railway.app).
-2. Click **New Project** → **Deploy from GitHub repo**.
-3. Select your repository.
-4. Under the service settings, navigate to **Variables** and add:
-   - `PORT`: `8000`
-   - `HOST`: `0.0.0.0`
-   - `ENVIRONMENT`: `production`
-   - `ALLOWED_ORIGINS`: `https://your-chess-coach-os.vercel.app` *(Set this to your specific Vercel frontend domain to secure the API).*
-5. Click **Deploy**. Railway will run Nixpacks, compile the Python virtual environment, install the `stockfish` package, bind to the target port, and expose a public HTTP domain.
-
----
-
-## 4. Production Security & Quality Checklist
-
-Before completing your deployment, verify that all security guards and operational checks are active:
-
-- [ ] **IP-Based Rate Limiting:** Verify that the backend rate-limits incoming analysis requests (5 queries per 10 minutes per IP address) to prevent API abuse.
-- [ ] **Input Sanitization:** Confirm username parameters are validated using regex (`^[a-zA-Z0-9_\-]+$`) to prevent path traversal or exploit injections.
-- [ ] **FastAPI Response Security Headers:** Confirm that standard headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and custom CSP directives) are successfully attached to every API response.
-- [ ] **CORS Restriction:** Ensure `ALLOWED_ORIGINS` in your backend variables is restricted to your Vercel deployment domain.
-- [ ] **WebGL Resource Cleanups:** Confirm that 3D assets and materials are cleanly disposed of (`.dispose()`) upon unmounting to prevent memory leaks.
-
----
-
-## 5. Local Production Dry Run
-
-To test a production-like build locally before pushing changes:
+`main.py` serves `frontend/dist/` when it exists, so you can skip Vercel entirely:
 
 ```bash
-# 1. Build the production React bundle
-cd frontend
-npm run build
-cd ..
+cd frontend && npm run build && cd ..
+# Dockerfile would need to copy frontend/dist (see note below)
+```
 
-# 2. Start the FastAPI server locally in production mode
+Then deploy one Render service with `ENVIRONMENT=production`, `ALLOWED_ORIGINS=https://<same-service>.onrender.com`,
+and build the frontend in the Dockerfile (add a Node stage). This avoids CORS but loses Vercel's CDN.
+
+---
+
+## 4. Local production dry run
+
+```bash
+# Backend exactly as Render runs it
+docker build -t chess-coach-api .
+docker run --rm -p 8000:8000 \
+  -e ENVIRONMENT=production \
+  -e ALLOWED_ORIGINS=http://localhost:5173 \
+  -e STOCKFISH_PATH=/usr/games/stockfish \
+  chess-coach-api
+
+# Frontend against that backend
+cd frontend
+VITE_API_URL=http://localhost:8000 npm run build
+npm run preview
+```
+
+Or without Docker:
+
+```bash
 export ENVIRONMENT=production
+export ALLOWED_ORIGINS=http://localhost:5173
+export STOCKFISH_PATH=/opt/homebrew/bin/stockfish   # your local binary
 uvicorn main:app --port 8000 --host 127.0.0.1
 ```
-Navigate to `http://127.0.0.1:8000` in your browser. The local FastAPI server will serve the compiled static React assets directly from `frontend/dist/` with secure HTTP headers activated.
+
+---
+
+## 5. Operational notes
+
+- **Long requests on Render.** Render allows HTTP responses up to 100 minutes and does not kill
+  idle compute mid-request, so synchronous Stockfish analysis fits. 10 games can still take several
+  minutes — the frontend must show a loading state and not retry aggressively.
+- **Render free plan** spins down after inactivity and has a slow cold start; the first analysis
+  request after idle will be much slower. Use a paid instance for anything public.
+- **Rate limiting** is in-process (5 requests / 10 min / IP). With more than one Render instance each
+  instance keeps its own counters. The Docker `CMD` passes `--proxy-headers` so the real client IP is
+  used behind Render's proxy; without it every visitor shares the proxy IP's limit.
+- **In-memory rate-limit state** resets on every deploy/restart and is not shared across instances.
+
+---
+
+## 6. Production security checklist
+
+- [ ] `ALLOWED_ORIGINS` restricted to the Vercel domain (never `*`) — enforced at startup.
+- [ ] IP-based rate limiting active on `/analyze`.
+- [ ] Username regex sanitization (`^[a-zA-Z0-9_\-]+$`) active.
+- [ ] Security headers (CSP, `X-Frame-Options`, `X-Content-Type-Options`) on every response.
+- [ ] Stockfish resolved from an absolute, existing path; `/health` reports `stockfish_available`.
+- [ ] HTTPS on both services (automatic on Vercel and Render).

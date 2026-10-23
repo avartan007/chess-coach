@@ -1,0 +1,19 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Deploys the FastAPI + Stockfish backend as a Docker web service.
+# The Vite frontend is deployed separately on Vercel.
+services:
+  - type: web
+    name: chess-coach-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: STOCKFISH_PATH
+        value: /usr/games/stockfish
+      # Set this in the Render dashboard to your Vercel URL(s),
+      # comma-separated, e.g. https://chess-coach.vercel.app
+      - key: ALLOWED_ORIGINS
+        sync: false
