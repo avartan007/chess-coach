@@ -53,12 +53,35 @@ Uvicorn on Render's `$PORT`, and a `render.yaml` Blueprint.
 `ENVIRONMENT=production` turns on fail-fast startup checks: the app refuses to boot without an
 explicit `ALLOWED_ORIGINS` (no `*`) and a working Stockfish binary.
 
+### How Stockfish is installed (no runtime download)
+
+Stockfish is **not** downloaded when someone clicks Analyze. It is installed once, when Render
+builds the Docker image:
+
+1. Render runs `docker build`. The `Dockerfile` starts from `python:3.11-slim`.
+2. `apt-get install stockfish` pulls the Debian package from the Debian mirrors and unpacks the
+   binary to `/usr/games/stockfish` inside the image layer (a few MB).
+3. That layer is baked into the image. Every container Render starts from it already has the binary
+   on disk, at no network cost.
+4. `STOCKFISH_PATH=/usr/games/stockfish` tells `main.py` where it lives. On each `/analyze` request
+   the app runs `chess.engine.SimpleEngine.popen_uci(...)`, which spawns the local binary as a child
+   process and talks UCI over stdin/stdout. It is shut down when the request finishes.
+
+So "downloading" happens only at deploy/build time, never per user or per request. The free Render
+plan keeps the built image; a restart does not re-download it, only a new deploy rebuilds the image.
+
+If you ever deploy without Docker (Render's native Python runtime), the checked-in `nixpacks.toml`
+does the equivalent: `nixPkgs = ["python310", "stockfish"]` makes Nix fetch Stockfish into the
+build's Nix store. Docker is the recommended path because the binary path is predictable.
+
 ### Verify the backend
 
 ```bash
 curl https://<your-api>.onrender.com/health
 # {"status":"ok","details":{"env":"production","stockfish_available":true}}
 ```
+
+You can also open a Render Shell on the service and run `stockfish --version`.
 
 ### Environment variables reference
 
@@ -89,7 +112,13 @@ curl https://<your-api>.onrender.com/health
    redeploy (not just a restart).
 4. **Deploy**.
 
+`frontend/vercel.json` holds this build config plus security headers (CSP, `X-Frame-Options`,
+immutable caching for `/assets/*`). Vercel only reads it when the project's **Root Directory** is
+`frontend`. Its `connect-src` allows `https://*.onrender.com`; if you put a custom domain in front of
+Render, add that origin to the CSP there.
+
 If `VITE_API_URL` is missing, the app calls `/analyze` on the Vercel domain, which returns 404.
+`frontend/.env.example` documents the variable for local builds.
 
 ### CORS round-trip
 
