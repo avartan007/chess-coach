@@ -22,7 +22,7 @@ jobs:
       - name: Run pip-audit
         run: |
           python -m pip install pip-audit
-          python -m pip_audit  # will fail job if vulnerabilities found
+          python -m pip_audit -r requirements.txt  # will fail job if vulnerabilities found in project requirements
       - name: Syntax check
         run: python -m py_compile main.py
 
