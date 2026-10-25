@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import requests
@@ -17,6 +18,40 @@ from datetime import datetime, timedelta
 from typing import Any
 
 app = FastAPI()
+
+app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Persistent HTTP Session for connection pooling to Chess.com
+http_session = requests.Session()
+
+# ── In-Memory TTL Cache ──
+CACHE_TTL = 300  # 5 minutes
+analysis_cache = {}
+pgn_cache = {}
+
+def get_cached_pgn(key: str):
+    if key in pgn_cache:
+        timestamp, data = pgn_cache[key]
+        if time.time() - timestamp < CACHE_TTL:
+            return data
+        else:
+            del pgn_cache[key]
+    return None
+
+def set_cached_pgn(key: str, data: str):
+    pgn_cache[key] = (time.time(), data)
+
+def get_cached_analysis(key: str):
+    if key in analysis_cache:
+        timestamp, data = analysis_cache[key]
+        if time.time() - timestamp < CACHE_TTL:
+            return data
+        else:
+            del analysis_cache[key]
+    return None
+
+def set_cached_analysis(key: str, data: dict):
+    analysis_cache[key] = (time.time(), data)
 
 # ── IP-Based Rate Limiting (Throttling) ──
 RATE_LIMIT_WINDOW = 600  # 10 minutes (in seconds)
@@ -133,15 +168,23 @@ def get_months_to_fetch(months: int):
 
 
 def fetch_pgn_for_month(username: str, year: int, month: int) -> str:
-    """Fetch PGN from Chess.com public API for a given month."""
+    """Fetch PGN from Chess.com public API for a given month (cached)."""
+    cache_key = f"{username.lower()}:{year}:{month}"
+    cached = get_cached_pgn(cache_key)
+    if cached is not None:
+        return cached
+
     url = f"https://api.chess.com/pub/player/{username}/games/{year}/{month:02d}/pgn"
     headers = {"User-Agent": "chess-coach-app/1.0"}
-    resp = requests.get(url, headers=headers, timeout=15)
+    resp = http_session.get(url, headers=headers, timeout=15)
     if resp.status_code == 404:
+        set_cached_pgn(cache_key, "")
         return ""  # no games that month, that's fine
     if resp.status_code != 200:
         raise HTTPException(status_code=502, detail=f"Chess.com API error: {resp.status_code}")
-    return resp.text
+    text = resp.text
+    set_cached_pgn(cache_key, text)
+    return text
 
 
 def classify_move(cp_loss: float) -> str:
@@ -748,6 +791,13 @@ def analyze(req: AnalyzeRequest, request: Request):
         )
 
     game_count = max(1, min(req.game_count, 100))
+
+    # Check analysis cache
+    cache_key = f"{req.username.lower()}:{game_count}"
+    cached_report = get_cached_analysis(cache_key)
+    if cached_report is not None:
+        return cached_report
+
     raw_games = []
 
     # Fetch months starting from most recent, stopping early once we have at least game_count games
@@ -807,6 +857,7 @@ def analyze(req: AnalyzeRequest, request: Request):
     report = build_pattern_report(analyzed_games, req.username)
     report["games"] = analyzed_games  # include per-game data for the UI
 
+    set_cached_analysis(cache_key, report)
     return report
 
 
@@ -815,7 +866,7 @@ def get_profile(username: str):
     """Quick check that a Chess.com username exists."""
     url = f"https://api.chess.com/pub/player/{username}"
     headers = {"User-Agent": "chess-coach-app/1.0"}
-    resp = requests.get(url, headers=headers, timeout=10)
+    resp = http_session.get(url, headers=headers, timeout=10)
     if resp.status_code == 404:
         raise HTTPException(status_code=404, detail="Username not found on Chess.com")
     data = resp.json()
