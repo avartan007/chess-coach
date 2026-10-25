@@ -177,12 +177,11 @@ def piece_name(piece_type: int) -> str:
     return names.get(piece_type, "unknown")
 
 
-def analyze_game(pgn_text: str, engine: chess.engine.SimpleEngine, username: str):
+def analyze_game(game: chess.pgn.Game, engine: chess.engine.SimpleEngine, username: str):
     """
-    Analyze a single PGN game.
+    Analyze a single PGN game object efficiently by reusing board position evaluations.
     Returns a dict with move-level data and game-level stats.
     """
-    game = chess.pgn.read_game(io.StringIO(pgn_text))
     if game is None:
         return None
 
@@ -196,7 +195,7 @@ def analyze_game(pgn_text: str, engine: chess.engine.SimpleEngine, username: str
     elif user_lower == black:
         user_color = chess.BLACK
     else:
-        return None  # game doesn't involve this user (shouldn't happen)
+        return None  # game doesn't involve this user
 
     result = game.headers.get("Result", "*")
     date = game.headers.get("Date", "")
@@ -218,6 +217,13 @@ def analyze_game(pgn_text: str, engine: chess.engine.SimpleEngine, username: str
     last_black_clk = None
     move_number = 0
 
+    # Stockfish limit optimized for fast & accurate centipawn evaluation
+    eval_limit = chess.engine.Limit(depth=10, time=0.05)
+
+    # Initial position evaluation before first move
+    info_current = engine.analyse(board, eval_limit)
+    score_current = info_current["score"].white().score(mate_score=10000)
+
     for node in game.mainline():
         move = node.move
         move_number += 1
@@ -231,15 +237,10 @@ def analyze_game(pgn_text: str, engine: chess.engine.SimpleEngine, username: str
         # Check user's queen presence before pushing move
         had_queen = len(board.pieces(chess.QUEEN, user_color)) > 0
 
-        # Evaluate position BEFORE the move
-        info_before = engine.analyse(board, chess.engine.Limit(depth=14, time=2.0))
-        score_before = info_before["score"].white().score(mate_score=10000)
-
-        # Get best move suggestion before making the move
-        best_move = info_before.get("pv", [None])[0]
+        # Position BEFORE move uses current evaluation
+        score_before = score_current
+        best_move = info_current.get("pv", [None])[0]
         best_move_uci = best_move.uci() if best_move else None
-
-        # Capture FEN before the move
         fen_before = board.fen()
 
         # Make the move
@@ -252,9 +253,10 @@ def analyze_game(pgn_text: str, engine: chess.engine.SimpleEngine, username: str
         has_queen = len(board.pieces(chess.QUEEN, user_color)) > 0
         just_lost_queen = had_queen and not has_queen
 
-        # Evaluate position AFTER the move
-        info_after = engine.analyse(board, chess.engine.Limit(depth=14, time=2.0))
-        score_after = info_after["score"].white().score(mate_score=10000)
+        # Evaluate position AFTER the move (this becomes score_current for next iteration)
+        info_current = engine.analyse(board, eval_limit)
+        score_after = info_current["score"].white().score(mate_score=10000)
+        score_current = score_after
 
         # Parse remaining clock time from PGN comment e.g. [%clk 0:02:59.2]
         import re
@@ -746,29 +748,28 @@ def analyze(req: AnalyzeRequest, request: Request):
         )
 
     game_count = max(1, min(req.game_count, 100))
-    all_pgn_text = ""
+    raw_games = []
 
-    # Fetch up to 6 months back until we have enough games
+    # Fetch months starting from most recent, stopping early once we have at least game_count games
     months_to_fetch = get_months_to_fetch(6)
     for year, month in months_to_fetch:
         pgn = fetch_pgn_for_month(req.username, year, month)
         if pgn:
-            all_pgn_text = pgn + "\n\n" + all_pgn_text  # prepend so oldest first
-
-    if not all_pgn_text.strip():
-        raise HTTPException(status_code=404, detail="No games found for this username.")
-
-    # Parse all games
-    pgn_io = io.StringIO(all_pgn_text)
-    raw_games = []
-    while True:
-        game = chess.pgn.read_game(pgn_io)
-        if game is None:
-            break
-        raw_games.append(game)
+            pgn_io = io.StringIO(pgn)
+            month_games = []
+            while True:
+                game = chess.pgn.read_game(pgn_io)
+                if game is None:
+                    break
+                month_games.append(game)
+            # month_games are in chronological order for that month.
+            # Prepend so overall raw_games preserves chronological order.
+            raw_games = month_games + raw_games
+            if len(raw_games) >= game_count:
+                break
 
     if not raw_games:
-        raise HTTPException(status_code=404, detail="Could not parse any games.")
+        raise HTTPException(status_code=404, detail="No games found for this username.")
 
     # Take the most recent N games
     raw_games = raw_games[-game_count:]
@@ -781,16 +782,26 @@ def analyze(req: AnalyzeRequest, request: Request):
             detail="Server misconfiguration: Stockfish engine is not available. Contact the administrator.",
         )
 
+    # Analyze with a thread-safe pool of Stockfish engine instances in parallel
+    import concurrent.futures
+
+    num_workers = min(max(1, (os.cpu_count() or 2)), 4, len(raw_games))
     analyzed_games = []
+
+    def analyze_single_game(raw_game):
+        try:
+            with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
+                return analyze_game(raw_game, engine, req.username)
+        except Exception as e:
+            logging.error(f"Error analyzing game with Stockfish: {e}")
+            return None
+
     try:
-        with chess.engine.SimpleEngine.popen_uci(STOCKFISH_PATH) as engine:
-            for raw_game in raw_games:
-                pgn_str = str(raw_game)
-                result = analyze_game(pgn_str, engine, req.username)
-                if result:
-                    analyzed_games.append(result)
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as executor:
+            results = list(executor.map(analyze_single_game, raw_games))
+            analyzed_games = [r for r in results if r is not None]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Stockfish error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Stockfish analysis error: {str(e)}")
 
     # Build pattern report
     report = build_pattern_report(analyzed_games, req.username)
