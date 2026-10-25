@@ -1,9 +1,10 @@
 # Chess Coach OS — Turn Your Chess Blunders into Personalized Training
 
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Visit_Site-2ea44f?style=for-the-badge)](YOUR_LIVE_URL)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Visit_Site-2ea44f?style=for-the-badge)](https://chess-coach-avartan.vercel.app/)
 [![Stack](https://img.shields.io/badge/Stack-React_|_FastAPI_|_Stockfish-blue?style=for-the-badge)]()
 
 > **Demo Preview:** Add a screenshot or short GIF of the interactive chessboard, analysis dashboard, or personalized blunder trainer here.
+<img width="1470" height="754" alt="Screenshot 2026-10-25 at 10 59 44" src="https://github.com/user-attachments/assets/94aae5ea-663d-4820-9b69-d552dc270839" />
 
 ## Why I Built This
 
