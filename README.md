@@ -1,130 +1,93 @@
-# Chess Coach OS
+# Chess Coach OS — Turn Your Chess Blunders into Personalized Training
 
-Quick Start
------------
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Visit_Site-2ea44f?style=for-the-badge)](YOUR_LIVE_URL)
+[![Stack](https://img.shields.io/badge/Stack-React_|_FastAPI_|_Stockfish-blue?style=for-the-badge)]()
 
-Run the backend and frontend locally (requires Python 3.10+, Node.js 18+, and a Stockfish binary):
+> **Demo Preview:** Add a screenshot or short GIF of the interactive chessboard, analysis dashboard, or personalized blunder trainer here.
 
-```bash
-# from project root
-cp .env.example .env   # edit STOCKFISH_PATH if needed
-make backend-install
-make frontend-install
-make frontend-dev      # runs Vite dev server (http://localhost:5174)
-make backend-run       # runs FastAPI on http://127.0.0.1:8000
-```
+## Why I Built This
 
-Chess Coach OS is a full-stack, personalized chess analysis and training platform. It allows players to import their recent games from Chess.com, evaluate their moves using a local Stockfish engine process, identify long-term playing patterns, and practice puzzles generated directly from their own in-game blunders.
+Most chess platforms identify mistakes in individual games, but understanding recurring weaknesses across multiple games requires deeper analysis. Chess Coach OS addresses this gap by analyzing a player's Chess.com game history, identifying recurring blunders and behavioral patterns, and transforming real mistakes into personalized training puzzles.
 
----
+## Key Engineering Highlights
 
-## 1. What is the project?
-This project is an interactive web application designed to help chess players learn from their own in-game mistakes. Rather than presenting generic tactical puzzles, the platform retrieves a player's real match history and isolates their specific errors. It aggregates statistics over multiple games to display performance trends, highlight coordinate hotspots, identify composure shifts under material stress, and provide conversational coaching feedback based on raw engine logs.
+- **Engine-Powered Analysis:** Integrates Stockfish through `python-chess` to evaluate positions, calculate centipawn losses, and identify stronger alternative moves.
+- **Personalized Training Pipeline:** Converts actual game blunders into interactive puzzles, allowing players to practice positions where they previously made mistakes.
+- **Behavioral Analytics:** Aggregates statistics across games to highlight playing tendencies, tactical weaknesses, and potential composure shifts under material pressure.
+- **Decoupled Architecture:** Uses a React frontend and FastAPI backend to separate interactive visualizations from computationally intensive chess analysis.
+- **Performance & Reliability:** Implements subprocess timeouts, session caching, environment-based configuration, and WebGL resource cleanup to improve stability and responsiveness.
 
----
+## System Architecture
 
-## 2. Why was it built?
-Most online chess platforms run engine evaluations that tell players *which* moves were errors, but they do not help players identify the recurring behavioral patterns behind those errors. Furthermore, standard chess puzzles are generic and lack emotional connection. 
+`Chess.com API` → `FastAPI Backend` → `PGN Parsing & Stockfish Analysis` → `Blunder Detection & Pattern Aggregation` → `React Dashboard & Personalized Trainer`
 
-This project was built to solve these problems by:
-- Creating highly personalized puzzles directly from the user's actual game blunders, helping them understand and correct their specific tactical oversights.
-- Identifying aggregate playstyle traits (e.g., patience, aggression, complexity) to diagnose structural weaknesses, like king safety failures or premature move rushing.
-- Serving as a practical, production-hardened demonstration of integrating modern frontends (React, WebGL, Web Audio) with standard native backend processes (FastAPI, multi-process chess engine wrappers).
+## Tech Stack
 
----
+- **Frontend:** React, Vite, Zustand, Framer Motion
+- **3D & Interaction:** Three.js, React Three Fiber, Web Audio API
+- **Backend:** Python, FastAPI, python-chess
+- **Chess Engine:** Stockfish
+- **Data Processing:** PGN parsing, centipawn-loss analysis, move classification, behavioral statistics
+- **Client-Side Storage:** LocalStorage caching
 
-## 3. How does it work?
-The application executes in a clean, decoupled data pipeline:
-1. **Data Ingestion:** The player enters their Chess.com username. The FastAPI backend queries the Chess.com public API to retrieve recent game PGNs.
-2. **Engine Analysis:** The backend parses the PGN files and pipes the positions into a local depth-14 Stockfish subprocess using the `python-chess` wrapper. Every move is evaluated to calculate centipawn losses and identify best candidate move alternatives.
-3. **Pattern Aggregation:** The backend aggregates statistics across all scanned games, classifying playstyle properties (aggressive checks/captures vs. defensive setups) and isolating tilt markers (like move-rushing under 1.8 seconds or blunder chains).
-4. **Interactive Training Generation:** All blunder positions, best continuation coordinates, and aggregate metrics are returned to the client as a single JSON payload. The React frontend stores the data in a Zustand store and dynamically populates the interactive dashboards, radar charts, and progression trainer.
+## Key Features
 
----
+- Import recent games using a Chess.com username.
+- Analyze moves and identify blunders using Stockfish.
+- Explore recurring mistakes and playing-style patterns.
+- Practice personalized puzzles generated from actual game positions.
+- Visualize performance through interactive dashboards and radar charts.
+- Experience an interactive 3D chessboard with synthesized audio feedback.
 
-## 4. What technologies were used?
+## Quick Start (Local Development)
 
-### Frontend
-- **React (Vite):** Client-side application framework.
-- **Zustand:** Centralized state store for responsive, multi-view data tracking.
-- **Framer Motion:** Smooth transitions and interface reveals.
-- **Three.js & React Three Fiber (R3F):** High-performance 3D responsive reflective chessboard visualization on the landing viewport.
-- **Web Audio API:** Synthesis of woodblock move indicators, bass blunder alarms, and crystal chime indicators natively without external asset downloads.
+**Prerequisites:** Python 3.10+, Node.js 18+, npm, and a locally installed Stockfish engine.
 
-### Backend
-- **FastAPI (Python):** Lightweight, asynchronous REST API gateway.
-- **python-chess:** Chess board state modeling, move legality tracking, and PGN parsing.
-- **Stockfish 16 Engine:** Spawns local subprocess threads to evaluate board positions.
+1. Clone the repository:
 
-### Client-Side Storage
-- **LocalStorage Caching:** Restores analyzed sessions instantly to prevent redundant server-side Stockfish evaluations.
-
----
-
-## 5. What problems were solved?
-- **Progression Deadlocks in Puzzles:** Replaced hard-locked stage architectures in the blunder trainer with a flexible solver state: players are never locked out on incorrect moves or reveals. A **🔄 Try Again** reset hook was introduced, letting players retry and learn from their mistakes to earn progress.
-- **WebGL Memory Bloating:** Managed Three.js GPU memory leaks during dashboard view transitions by implementing explicit `.dispose()` garbage collection hooks on WebGL materials and fog objects when the background unmounts.
-- **CORS & Environment Configurations:** Hardened backend security by allowingallowed origins and Stockfish paths to resolve dynamically from environment files, supporting seamless deployments.
-- **Dynamic Threading & Hangs:** Configured strict subprocess timeout parameters on the Stockfish worker threads to protect CPU resources from locking up during long evaluations.
-
----
-
-## 6. How can someone run it?
-
-### Prerequisites
-- **Python 3.10+** (with virtual environment support)
-- **Node.js 18+** (with `npm`)
-- **Stockfish Chess Engine:** Download the binary for your specific OS from the [Stockfish Official Site](https://stockfishchess.org/download/).
-
-### Step 1: Run the Backend
-1. Clone the repository and open the project root.
-2. Setup a virtual environment:
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   git clone YOUR_GITHUB_REPOSITORY_URL
+   cd chess-coach
    ```
-3. Install backend dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-4. Copy the environment template:
+
+2. Configure the environment:
+
    ```bash
    cp .env.example .env
    ```
-   Open `.env` and set the path to your downloaded Stockfish executable:
-   ```env
-   STOCKFISH_PATH="/usr/local/bin/stockfish"  # Update with your local path!
-   ```
-5. Launch the FastAPI server:
+
+   Set `STOCKFISH_PATH` in `.env` to the location of your Stockfish executable.
+
+3. Install dependencies:
+
    ```bash
-   uvicorn main:app --reload --port 8000
+   make backend-install
+   make frontend-install
    ```
 
-### Step 2: Run the Frontend
-1. Open a new terminal tab and enter the `frontend/` folder:
+4. Start the backend and frontend in separate terminals:
+
    ```bash
-   cd frontend
+   make backend-run
    ```
-2. Install Node dependencies:
+
    ```bash
-   npm install
+   make frontend-dev
    ```
-3. Run the Vite development server:
-   ```bash
-   npm run dev
-   ```
-4. Navigate to `http://localhost:5173` in your browser.
 
----
+5. Open the frontend at the URL printed by Vite, typically `http://localhost:5174`.
 
-## About the Project
+## Problems Solved
 
-> "As a Computer Science Engineering student and a chess enthusiast, I wanted to build a practical tool that helps players learn from their own real matches rather than solving abstract, randomized puzzles. Building this project allowed me to combine my interest in chess with my passion for full-stack software engineering. It served as an excellent exercise in writing clear asynchronous Python gateways, executing multi-process engine pipelines, managing high-performance WebGL renders in React, and designing clean user experiences. I wanted to showcase a project that is technically robust, clearly structured, and easy to deploy."
-> 
-> — **[Your Name]** (Computer Science & Engineering Student)
-
----
+- **Generic Puzzle Training:** Generates practice positions from a player's own mistakes rather than relying exclusively on unrelated puzzles.
+- **Limited Long-Term Insights:** Aggregates results across games to reveal recurring weaknesses and playing tendencies.
+- **Unresponsive Analysis Workflows:** Uses bounded engine execution and subprocess timeouts to reduce the risk of long-running evaluations.
+- **Rendering Resource Leaks:** Disposes of Three.js resources during component cleanup to reduce unnecessary GPU memory usage.
 
 ## License
-Distributed under the open-source [MIT License](LICENSE). Feel free to fork, customize, and build upon this showcase project!
-# chess-coach
+
+Distributed under the MIT License, if included in the repository's `LICENSE` file.
+
+---
+
+**Chess Coach OS** combines chess, engine analysis, behavioral insights, and full-stack engineering to make improvement more personalized and measurable.
