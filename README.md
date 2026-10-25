@@ -4,7 +4,11 @@
 [![Stack](https://img.shields.io/badge/Stack-React_|_FastAPI_|_Stockfish-blue?style=for-the-badge)]()
 
 
-https://github.com/user-attachments/assets/d7ab3b60-272e-47b7-8432-807aed351a4c
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/69cb0ea4-c811-40c2-8f01-3aae6a9b29ca"
+       alt="Chess Coach OS Landing Page Demo"
+       width="100%" />
+</p>
 
 
 ## Why I Built This
