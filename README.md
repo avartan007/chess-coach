@@ -86,10 +86,6 @@ Most chess platforms identify mistakes in individual games, but understanding re
 - **Unresponsive Analysis Workflows:** Uses bounded engine execution and subprocess timeouts to reduce the risk of long-running evaluations.
 - **Rendering Resource Leaks:** Disposes of Three.js resources during component cleanup to reduce unnecessary GPU memory usage.
 
-## License
-
-Distributed under the MIT License, if included in the repository's `LICENSE` file.
-
 ---
 
 **Chess Coach OS** combines chess, engine analysis, behavioral insights, and full-stack engineering to make improvement more personalized and measurable.
